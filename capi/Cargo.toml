@@ -1,0 +1,22 @@
+[package]
+name = "bof3player-capi"
+description = "Stable C ABI for the bof3player PlayStation audio library"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme = "README.md"
+include = ["src/**", "include/**", "cbindgen.toml", "README.md", "LICENSE", "CHANGELOG.md", "CONTRIBUTING.md"]
+publish = false
+
+[lib]
+name = "bof3player"
+crate-type = ["cdylib", "staticlib", "rlib"]
+doc = false
+doctest = false
+
+[dependencies]
+bof3player = { workspace = true, features = ["std", "ogg"] }
+
+[lints]
+workspace = true

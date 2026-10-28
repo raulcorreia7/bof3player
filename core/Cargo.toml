@@ -1,0 +1,67 @@
+[package]
+name = "bof3player"
+description = "Breath of Fire III player and audio library: soundbanks, sequences, XA and CD-DA through an SPU-accurate voice engine"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["playstation", "audio", "psx", "spu", "vab"]
+categories = ["multimedia::audio", "game-development", "no-std"]
+include = ["src/**", "README.md", "LICENSE", "CHANGELOG.md", "CONTRIBUTING.md"]
+publish = false
+
+[features]
+default = ["std", "ogg"]
+# File, folder and disc-image access through psx-audio, and extraction through emi.
+std = ["psx-audio/std", "emi/std"]
+# Ogg Vorbis export through psx-audio.
+ogg = ["std", "psx-audio/ogg"]
+# Audio output through `cpal`.
+audio = ["std", "dep:cpal"]
+# The names file reader (JSON through `serde`).
+names = ["std", "dep:serde", "dep:serde_json"]
+# The `bof3player-gui` binary: a `gpui` window.
+gui = ["audio", "names", "dep:clap", "dep:gpui"]
+# The `bof3player` and `bof3player-tui` binaries.
+cli = [
+    "audio",
+    "names",
+    "dep:clap",
+    "dep:ratatui",
+    "dep:claxon",
+    "dep:lewton",
+    "dep:hound",
+]
+
+[[bin]]
+name = "bof3player"
+path = "src/bin/bof3player.rs"
+required-features = ["cli"]
+
+[[bin]]
+name = "bof3player-tui"
+path = "src/bin/bof3player-tui.rs"
+required-features = ["cli"]
+
+[[bin]]
+name = "bof3player-gui"
+path = "src/bin/bof3player-gui.rs"
+required-features = ["gui"]
+
+[dependencies]
+psx-audio = { workspace = true, default-features = false }
+emi.workspace = true
+psx-formats.workspace = true
+clap = { workspace = true, optional = true }
+cpal = { workspace = true, optional = true }
+gpui = { workspace = true, optional = true }
+ratatui = { workspace = true, optional = true }
+claxon = { workspace = true, optional = true }
+lewton = { workspace = true, optional = true }
+hound = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+[lints]
+workspace = true

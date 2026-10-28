@@ -19,8 +19,8 @@ std = ["psx-formats/std", "dep:serde", "dep:serde_json"]
 
 [dependencies]
 psx-formats = { version = "0.1.0", path = "../psx-formats", default-features = false }
-serde = { version = "1.0.228", features = ["derive"], optional = true }
-serde_json = { version = "1.0.150", optional = true }
+serde = { version = "1.0.229", features = ["derive"], optional = true }
+serde_json = { version = "1.0.154", optional = true }
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

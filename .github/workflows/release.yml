@@ -38,6 +38,7 @@ jobs:
           sudo apt-get install -y libasound2-dev libfontconfig1-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libvulkan-dev
       - name: Install Rust
         run: rustup update stable && rustup default stable
+      - uses: Swatinem/rust-cache@v2
       - name: Build all tools
         run: cargo build --release --locked -p bof3player --features cli,gui --bin bof3player --bin bof3player-tui --bin bof3player-gui
       - name: Package

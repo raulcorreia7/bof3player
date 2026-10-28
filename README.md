@@ -29,6 +29,21 @@ bof3player -i "Breath of Fire III.cue" render --format flac -o song.flac "music:
 bof3player-tui -i "Breath of Fire III.cue"
 ```
 
+## Game data
+
+`-i` takes any of these:
+
+- a `.cue` sheet, with its `.bin` next to it;
+- a raw disc image (`.bin` or `.iso`);
+- a folder of files extracted from the disc. Use the folder that holds `SLUS_004.22` and `BIN/`,
+  or the `BIN` folder itself.
+
+Any tool that copies the disc's files out works for extraction. Then pass the folder:
+
+```sh
+bof3player -i ~/games/bof3-extracted list --kind music
+```
+
 ## Install
 
 Download an archive from [Releases](https://github.com/raulcorreia7/bof3player/releases), unpack it

@@ -1,0 +1,32 @@
+# The bof3player repository: the player, its library, the C ABI and the generic
+# PlayStation crates it reads through. The workspace builds on its own.
+[workspace]
+resolver = "3"
+members = ["psx-formats"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+
+[workspace.dependencies]
+bof3player = { path = "core", version = "0.1.0", default-features = false }
+emi = { path = "emi", version = "0.1.0", default-features = false }
+psx-audio = { path = "psx-audio", version = "0.1.0", default-features = false }
+psx-cd = { path = "psx-cd", version = "0.1.0" }
+psx-formats = { path = "psx-formats", version = "0.1.0", default-features = false }
+clap = { version = "4.6.7", features = ["derive", "wrap_help"] }
+claxon = "0.4.3"
+cpal = "0.18.2"
+gpui = "=0.2.2"
+hound = "3.5.1"
+lewton = "0.10.2"
+ratatui = "0.30"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

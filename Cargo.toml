@@ -2,7 +2,7 @@
 # PlayStation crates it reads through. The workspace builds on its own.
 [workspace]
 resolver = "3"
-members = ["psx-formats", "psx-cd", "psx-audio"]
+members = ["psx-formats", "psx-cd", "psx-audio", "emi"]
 
 [workspace.package]
 edition = "2024"

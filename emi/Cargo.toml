@@ -1,0 +1,29 @@
+[package]
+name = "emi"
+description = "EMI archive container: table of contents, entry extraction and type-8 cue records"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+readme = "README.md"
+keywords = ["playstation", "archive", "container", "cue"]
+categories = ["parser-implementations", "no-std"]
+include = ["src/**", "README.md", "LICENSE"]
+publish = false
+
+[features]
+default = ["std"]
+# Table, payload and cue parsing from bytes alone (`no_std + alloc`); `std` adds
+# files, folders and entry extraction.
+std = ["psx-formats/std", "dep:serde", "dep:serde_json"]
+
+[dependencies]
+psx-formats = { version = "0.1.0", path = "../psx-formats", default-features = false }
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+serde_json = { version = "1.0.150", optional = true }
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

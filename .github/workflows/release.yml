@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+          - os: ubuntu-24.04-arm
+            platform: linux-aarch64
+          - os: macos-15
+            platform: macos-arm64
+          - os: macos-15-intel
+            platform: macos-x86_64
+          - os: windows-2022
+            platform: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfontconfig1-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libvulkan-dev
+      - name: Install make on Windows
+        if: runner.os == 'Windows'
+        run: choco install make -y
+      - name: Install Rust
+        run: rustup update stable && rustup default stable
+      - uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: release-${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Build all tools
+        run: make build
+      - name: Package
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          OS: ${{ runner.os }}
+        run: |
+          set -euo pipefail
+          name="bof3player-${PLATFORM}"
+          mkdir -p "$name/data" dist
+          suffix=""
+          if [[ "$OS" == Windows ]]; then suffix=.exe; fi
+          for tool in bof3player bof3player-tui bof3player-gui; do
+            cp "target/release/${tool}${suffix}" "$name/"
+          done
+          cp data/bof3-names.json "$name/data/"
+          cp README.md LICENSE "$name/"
+          if [[ "$OS" == Windows ]]; then
+            7z a "dist/${name}.zip" "$name" >/dev/null
+            archive="${name}.zip"
+          else
+            tar -czf "dist/${name}.tar.gz" "$name"
+            archive="${name}.tar.gz"
+          fi
+          cd dist
+          if [[ "$OS" == macOS ]]; then
+            shasum -a 256 "$archive" > "${archive}.sha256"
+          else
+            sha256sum "$archive" > "${archive}.sha256"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true

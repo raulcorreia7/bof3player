@@ -1,0 +1,29 @@
+[package]
+name = "psx-cd"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "PlayStation disc images: ISO9660, CD-XA and Mode 2 sectors, CUE sheets, extraction and patching"
+license = "MIT"
+readme = "README.md"
+keywords = ["playstation", "psx", "iso9660", "cdrom", "disc-image"]
+categories = ["parser-implementations", "filesystem", "multimedia"]
+include = ["src/**", "tests/**", "README.md", "LICENSE", "CHANGELOG.md"]
+publish = false
+
+[dependencies]
+md-5 = "0.11.0"
+psx-formats = { version = "0.1.0", path = "../psx-formats", default-features = false }
+quick-xml = "0.41.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+sha2 = "0.11.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

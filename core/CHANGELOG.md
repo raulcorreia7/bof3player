@@ -6,18 +6,13 @@ not through a package registry.
 
 ## 0.1.2
 
-- Added content-based deduplication for library items.
 - Removed the C API.
+- Group tracks with the same content; --all and a view-all toggle show every entry.
 - Improved spectrum bands, colours and TUI responsiveness.
-- Added grouping of same-content items with `--all`.
 - Added `bof3-names` crate for bundled catalog names.
 - Patched `taffy`/grid for a security update.
 - Meter the signal before volume and mute.
 - Report a missing GPU context instead of panicking.
-
-## Unreleased
-
-- Removed the C API.
 
 ## 0.1.0
 

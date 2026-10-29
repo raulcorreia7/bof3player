@@ -975,6 +975,7 @@
   "bank:MAGIC225":{"title":"Temptation","source":"game","abilities":[225],"evidence":"table D_800B6510/D_800B65F8 (func_800AE1F8)"},
   "bank:MAGIC226":{"title":"MeteorStrike","source":"game","abilities":[226],"evidence":"table D_800B6510/D_800B65F8 (func_800AE1F8)"},
   "bank:MAGIC227":{"title":"MeteorStrike","source":"game","abilities":[227],"evidence":"table D_800B6510/D_800B65F8 (func_800AE1F8)","same_as":"bank:MAGIC226"},
+  "bank:PAPYD00":{"title":"BPLCHAR","source":"game","evidence":"EMI BPLCHAR slots/banks in world00/area016/13 (build objects); BIN/BPLCHAR/PAPY*.EMI on disc"},
   "bank:PAPYD01":{"same_as":"bank:PAPYD00"},
   "bank:PAPYD02":{"same_as":"bank:PAPYD00"},
   "bank:PAPYD03":{"same_as":"bank:PAPYD00"},

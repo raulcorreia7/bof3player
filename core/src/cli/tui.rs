@@ -34,7 +34,7 @@ pub const TICK: Duration = Duration::from_millis(50);
 /// Frame interval of the library browser while something moves: about 60 frames per second.
 const FRAME: Duration = Duration::from_millis(16);
 /// Redraw interval of the library browser when nothing moves.
-const IDLE_FRAME: Duration = Duration::from_millis(100);
+const IDLE_FRAME: Duration = Duration::from_millis(250);
 /// Seconds a seek key moves.
 pub const SEEK_STEP: f64 = 5.0;
 /// Volume change per key press.
@@ -627,11 +627,7 @@ fn row_line(app: &App, row: &Row, width: usize) -> Line<'static> {
                 (title, _) => (format!("{:<name_width$}", item.name), title.to_string()),
             };
             let room = width.saturating_sub(fixed);
-            let title: String = if title.chars().count() > room {
-                title.chars().take(room.saturating_sub(1)).chain(['…']).collect()
-            } else {
-                title
-            };
+            let title = head_fit(title, room);
             let used = pad + 4 + name.chars().count() + title.chars().count();
             let gap = width.saturating_sub(used + time_width).max(1);
             Line::from(vec![
@@ -851,6 +847,8 @@ pub fn padding(area: Rect) -> Padding {
     if roomy(area) { Padding::new(2, 2, 1, 1) } else { Padding::horizontal(1) }
 }
 
+/// Now-playing rows narrower than this show only the position, leaving the room to the title.
+const FULL_TIME_MIN_WIDTH: u16 = 40;
 /// Terminals shorter than this drop the header, keeping the rows for the list and the playbar.
 const HEADER_MIN_HEIGHT: u16 = 16;
 /// Terminals shorter than this drop the message and key help rows, keeping the now-playing bar.
@@ -946,22 +944,25 @@ pub fn draw_playbar(
             .split(inner);
 
     let (pos, dur) = if now.is_some() { deck.times() } else { (0.0, 0.0) };
+    let time =
+        if rows[0].width >= FULL_TIME_MIN_WIDTH { format!("{} / {}", clock(pos), clock(dur)) } else { clock(pos) };
+    let [left, right] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(time.chars().count() as u16)])
+        .spacing(1)
+        .areas(rows[0]);
     let title = match &now {
         Some((id, label)) => {
             let state = if deck.paused() { "❚❚ " } else { "▶ " };
-            let kind = id.split([':', '/']).next().unwrap_or("");
+            let kind = format!("   {}", id.split([':', '/']).next().unwrap_or(""));
+            let room = usize::from(left.width).saturating_sub(state.chars().count());
+            let fits = label.chars().count() + kind.chars().count() <= room;
             Line::from(vec![
                 Span::styled(state, Style::new().fg(Color::Green)),
-                Span::styled(label.clone(), Style::new().add_modifier(Modifier::BOLD)),
-                Span::styled(format!("   {kind}"), Style::new().fg(DIM)),
+                Span::styled(head_fit(label.clone(), room), Style::new().add_modifier(Modifier::BOLD)),
+                Span::styled(if fits { kind } else { String::new() }, Style::new().fg(DIM)),
             ])
         }
         None => Line::styled("Nothing playing", Style::new().fg(DIM)),
     };
-    let time = format!("{} / {}", clock(pos), clock(dur));
-    let [left, right] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(time.chars().count() as u16)])
-        .spacing(1)
-        .areas(rows[0]);
     frame.render_widget(Paragraph::new(title), left);
     frame.render_widget(Paragraph::new(Line::styled(time, Style::new().add_modifier(Modifier::BOLD))), right);
 
@@ -1009,13 +1010,23 @@ fn themed(rgb: u32) -> Color {
     static TRUECOLOR: OnceLock<bool> = OnceLock::new();
     let truecolor = *TRUECOLOR
         .get_or_init(|| std::env::var("COLORTERM").is_ok_and(|value| matches!(value.as_str(), "truecolor" | "24bit")));
-    let [_, r, g, b] = rgb.to_be_bytes();
     if truecolor {
+        let [_, r, g, b] = rgb.to_be_bytes();
         Color::Rgb(r, g, b)
     } else {
-        let level = |channel: u8| (u16::from(channel) * 5 + 127) / 255;
-        Color::Indexed((16 + 36 * level(r) + 6 * level(g) + level(b)) as u8)
+        cube(rgb)
     }
+}
+
+/// The nearest color of the 256-color palette's 6×6×6 cube, whose channel steps are 0, 95, 135,
+/// 175, 215 and 255.
+fn cube(rgb: u32) -> Color {
+    let level = |shift: u32| match (rgb >> shift) & 0xff {
+        0..48 => 0,
+        48..115 => 1,
+        channel => (channel - 35) / 40,
+    };
+    Color::Indexed((16 + 36 * level(16) + 6 * level(8) + level(0)) as u8)
 }
 
 /// One row of the progress bar, `width` cells wide: the played part in the accent with a
@@ -1113,6 +1124,15 @@ fn draw_spectrum(frame: &mut Frame<'_>, spectrum: &mut Spectrum, area: Rect) {
                     .set_fg(themed(tint.apply(theme::spectrum_at((row as f32 + 0.5) / rows as f32))));
             }
         }
+    }
+}
+
+/// `text` cut to `width` columns with an ellipsis at the end where it is longer.
+fn head_fit(text: String, width: usize) -> String {
+    if text.chars().count() <= width {
+        text
+    } else {
+        text.chars().take(width.saturating_sub(1)).chain(['…']).collect()
     }
 }
 
@@ -1217,24 +1237,24 @@ pub fn run(global: &Global, naming: &dyn Naming) -> Result<ExitCode, String> {
     let mut terminal = ratatui::init();
     let result = (|| -> std::io::Result<()> {
         // Frames are paced from the last draw, so input waits at most until the next frame is due
-        // and a key press draws at once. Idle, the loop wakes ten times a second.
+        // and a key press draws at once. Idle, the loop wakes four times a second.
         while !app.quit {
             let drawn = Instant::now();
             terminal.draw(|f| draw(f, &mut app))?;
             let frame = if app.animating() { FRAME } else { IDLE_FRAME };
+            // Wait for the next frame or a key, then take every event already queued before the
+            // next draw, so held keys never fall behind. A resize draws at once.
             let mut wait = frame.saturating_sub(drawn.elapsed());
-            while event::poll(wait)? {
-                match event::read()? {
+            while !app.quit && !app.choose_folder && event::poll(wait)? {
+                wait = match event::read()? {
                     Event::Key(key) => {
                         app.message.clear();
                         app.on_key(key);
-                        break;
+                        Duration::ZERO
                     }
-                    // Redraw at once for the new size.
-                    Event::Resize(..) => break,
-                    _ => {}
-                }
-                wait = frame.saturating_sub(drawn.elapsed());
+                    Event::Resize(..) => Duration::ZERO,
+                    _ => frame.saturating_sub(drawn.elapsed()),
+                };
             }
             if std::mem::take(&mut app.choose_folder) {
                 let start = absolute(&app.global.export_dir);
@@ -1252,4 +1272,20 @@ pub fn run(global: &Global, naming: &dyn Naming) -> Result<ExitCode, String> {
     ratatui::restore();
     result.map_err(|e| e.to_string())?;
     Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn theme_colors_map_to_the_nearest_cube_color() {
+        assert_eq!(cube(0x000000), Color::Indexed(16));
+        assert_eq!(cube(0xffffff), Color::Indexed(231));
+        assert_eq!(cube(0xff0000), Color::Indexed(196));
+        // Each channel lands on the nearest step: 0x5f is 95, 0x87 is 135, 0xd7 is 215.
+        assert_eq!(cube(0x5f87d7), Color::Indexed(16 + 36 + 2 * 6 + 4));
+        assert_eq!(cube(0x1e88e5), Color::Indexed(16 + 2 * 6 + 4));
+        assert_eq!(cube(0x3b0000), Color::Indexed(16 + 36));
+    }
 }

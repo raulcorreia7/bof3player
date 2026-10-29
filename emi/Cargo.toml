@@ -1,7 +1,7 @@
 [package]
 name = "emi"
 description = "EMI archive container: table of contents, entry extraction and type-8 cue records"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
@@ -18,7 +18,7 @@ default = ["std"]
 std = ["psx-formats/std", "dep:serde", "dep:serde_json"]
 
 [dependencies]
-psx-formats = { version = "0.1.1", path = "../psx-formats", default-features = false }
+psx-formats = { version = "0.1.2", path = "../psx-formats", default-features = false }
 serde = { version = "1.0.229", features = ["derive"], optional = true }
 serde_json = { version = "1.0.154", optional = true }
 

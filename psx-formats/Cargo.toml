@@ -1,6 +1,6 @@
 [package]
 name = "psx-formats"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.88"
 description = "PlayStation formats: SPU and XA ADPCM, VAB sound banks, SEP sequences, Mode 2 sectors, WAVE, VRAM uploads, CLUTs and TIM images"

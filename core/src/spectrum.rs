@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! A spectrum analyzer for the output of a [`Deck`](crate::deck::Deck): the last samples go
-//! through a Hann window and an FFT and become log-spaced bands in decibels. The band count
+//! through a Hann window and an FFT and become near-log-spaced bands in decibels. The band count
 //! follows the display (one band per terminal column, a fixed count in the window); the frequency
 //! mapping and the motion are the same for every count. Bands rise fast, jump past their recent
 //! average on an onset, fall at a steady rate and carry falling peak caps; the motion follows the time between updates, so it looks the
@@ -21,8 +21,12 @@ const WINDOW: usize = 4096;
 const FLOOR_DB: f32 = -70.0;
 /// Lowest and highest band edges in hertz. The top edge drops to the Nyquist frequency at low
 /// sample rates.
-const LOW_HZ: f32 = 30.0;
+const LOW_HZ: f32 = 40.0;
 const HIGH_HZ: f32 = 16_000.0;
+/// Hertz added before the log spacing: bands are log-spaced in `f + KNEE_HZ`, so they stop
+/// narrowing below about this frequency and the bass takes less of the width (about 12% below
+/// 150 Hz, against 25% for pure log spacing). `0.0` is pure log spacing.
+const KNEE_HZ: f32 = 100.0;
 /// Lift per octave above `LOW_HZ`, in decibels. Music has less energy high up; the lift keeps
 /// the treble visible.
 const TILT_DB_PER_OCTAVE: f32 = 1.0;
@@ -113,15 +117,22 @@ impl Band {
     }
 }
 
-/// `count` log-spaced bands from `LOW_HZ` to `HIGH_HZ` at `rate` hertz, into `bands`.
+/// The frequency `at` of the way (`0.0` to `1.0`) across bands that run from `LOW_HZ` to `top`
+/// hertz.
+fn edge_hz(at: f32, top: f32) -> f32 {
+    let (low, high) = (LOW_HZ + KNEE_HZ, top + KNEE_HZ);
+    low * (high / low).powf(at) - KNEE_HZ
+}
+
+/// `count` bands from `LOW_HZ` to `HIGH_HZ` at `rate` hertz, spaced by [`edge_hz`], into `bands`.
 fn layout(count: usize, rate: u32, bands: &mut Vec<Band>) {
     let bin_hz = rate as f32 / WINDOW as f32;
     let top = HIGH_HZ.min(rate as f32 / 2.0);
-    let edge = |at: usize| LOW_HZ * (top / LOW_HZ).powf(at as f32 / count as f32) / bin_hz;
+    let edge = |at: f32| edge_hz(at / count as f32, top) / bin_hz;
     bands.clear();
     bands.extend((0..count).map(|band| {
-        let (low, high) = (edge(band), edge(band + 1));
-        let center = (low * high).sqrt();
+        let (low, high) = (edge(band as f32), edge(band as f32 + 1.0));
+        let center = edge(band as f32 + 0.5);
         let bins =
             if high - low < 1.0 { Bins::At(center) } else { Bins::Peak(low.round() as usize..high.round() as usize) };
         Band { bins, tilt_db: TILT_DB_PER_OCTAVE * (center * bin_hz / LOW_HZ).log2() }
@@ -326,13 +337,13 @@ mod tests {
         (0..WINDOW).map(|i| (2.0 * PI * hz * i as f32 / RATE as f32).sin() * amplitude).collect()
     }
 
-    /// The center frequency, in hertz, of the loudest of `count` bands after a long look at `scope`.
-    fn loudest_center(scope: &[f32], count: usize) -> f32 {
+    /// The loudest of `count` bands after a long look at `scope`.
+    fn loudest(scope: &[f32], count: usize) -> usize {
         let mut spectrum = Spectrum::new(count);
         spectrum.advance(scope, RATE, 10.0);
         let loudest = (0..count).max_by(|&a, &b| spectrum.levels[a].total_cmp(&spectrum.levels[b])).unwrap();
         assert!(spectrum.levels[loudest] > 0.6, "{:?}", spectrum.levels);
-        LOW_HZ * (HIGH_HZ / LOW_HZ).powf((loudest as f32 + 0.5) / count as f32)
+        loudest
     }
 
     #[test]
@@ -367,8 +378,11 @@ mod tests {
     fn a_sine_lights_the_band_that_holds_its_pitch_at_any_band_count() {
         for hz in [60.0, 250.0, 1000.0, 8000.0] {
             for count in [32, 100, 256] {
-                let center = loudest_center(&sine(hz, 0.1), count);
-                assert!((center / hz).log2().abs() < 0.3, "{hz} Hz lit the band centered at {center} Hz of {count}");
+                let band = loudest(&sine(hz, 0.1), count);
+                let (low, high) =
+                    (edge_hz(band as f32 / count as f32, HIGH_HZ), edge_hz((band + 1) as f32 / count as f32, HIGH_HZ));
+                // The band that holds the pitch, or a neighbor where the pitch sits near an edge.
+                assert!(low / 1.1 <= hz && hz <= high * 1.1, "{hz} Hz lit band {band} of {count}, {low}-{high} Hz");
             }
         }
     }

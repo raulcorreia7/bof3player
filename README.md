@@ -1,6 +1,6 @@
 # bof3player
 
-[![CI](https://github.com/raulcorreia7/bof3player/actions/workflows/ci.yml/badge.svg)](https://github.com/raulcorreia7/bof3player/actions/workflows/ci.yml)
+[![CI](https://github.com/raulcorreia7/bof3player/actions/workflows/ci.yml/badge.svg?branch=main&event=workflow_dispatch)](https://github.com/raulcorreia7/bof3player/actions/workflows/ci.yml)
 
 A player for the music and sound of *Breath of Fire III* (PlayStation). It reads the game's sound
 banks, sequences, XA streams and CD audio from your own disc image and renders them through a model

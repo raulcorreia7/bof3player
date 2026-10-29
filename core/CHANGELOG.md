@@ -4,6 +4,10 @@ All notable changes to `bof3player` are recorded here. The project follows
 [Semantic Versioning](https://semver.org/) and is distributed as a repository,
 not through a package registry.
 
+## Unreleased
+
+- Removed the C API.
+
 ## 0.1.0
 
 First release of `bof3player`. The [SPU model evidence](../docs/spu-model.md#evidence)

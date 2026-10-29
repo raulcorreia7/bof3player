@@ -791,13 +791,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bof3player-capi"
-version = "0.1.1"
-dependencies = [
- "bof3player",
-]
-
-[[package]]
 name = "bstr"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

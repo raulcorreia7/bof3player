@@ -16,14 +16,6 @@ cargo deny check
 `psx-formats`, `psx-audio` and `emi` are `no_std` plus `alloc` without their `std` feature. If you
 change them, also run `cargo check -p psx-formats --no-default-features`.
 
-`capi/include/bof3player.h` is generated from `capi/src/lib.rs`. Change the Rust declarations and
-regenerate the header. Do not edit it by hand:
-
-```sh
-cd capi
-cbindgen --config cbindgen.toml --crate bof3player-capi --output include/bof3player.h
-```
-
 Rust 1.88 or newer, edition 2024.
 
 ## Test data

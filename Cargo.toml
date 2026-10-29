@@ -15,11 +15,11 @@ rust-version = "1.88"
 license = "MIT"
 
 [workspace.dependencies]
-bof3player = { path = "core", version = "0.1.0", default-features = false }
-emi = { path = "emi", version = "0.1.0", default-features = false }
-psx-audio = { path = "psx-audio", version = "0.1.0", default-features = false }
-psx-cd = { path = "psx-cd", version = "0.1.0" }
-psx-formats = { path = "psx-formats", version = "0.1.0", default-features = false }
+bof3player = { path = "core", version = "0.1.1", default-features = false }
+emi = { path = "emi", version = "0.1.1", default-features = false }
+psx-audio = { path = "psx-audio", version = "0.1.1", default-features = false }
+psx-cd = { path = "psx-cd", version = "0.1.1" }
+psx-formats = { path = "psx-formats", version = "0.1.1", default-features = false }
 clap = { version = "4.6.7", features = ["derive", "wrap_help"] }
 claxon = "0.4.3"
 cpal = "0.18.2"

@@ -97,6 +97,7 @@ struct App {
     spectrum: Spectrum,
     last_tick: Instant,
     quit: bool,
+    show_all_dupes: bool,
 }
 
 fn kind_key(kind: Kind) -> String {
@@ -160,6 +161,7 @@ impl App {
             spectrum: Spectrum::new(0),
             last_tick: Instant::now(),
             quit: false,
+            show_all_dupes: false,
         };
         app.rebuild();
         let first = app.rows.iter().position(|row| matches!(row, Row::Item(..))).unwrap_or(0);
@@ -189,11 +191,32 @@ impl App {
     fn rebuild(&mut self) {
         let keep = self.selected_row().cloned();
         self.rows.clear();
+        let catalog = self.library.catalog();
+        let groups = catalog.groups();
+        use std::collections::HashSet;
+        let mut seen_canon: HashSet<String> = HashSet::new();
         if !self.query.is_empty() {
             let filter = Filter { playable_only: self.playable_only, ..Filter::default() };
-            let catalog = self.library.catalog();
             for hit in catalog.search(&self.query, &filter).into_iter().take(MAX_HITS) {
                 if let Some(index) = catalog.index_of(&hit.id) {
+                    if !self.show_all_dupes {
+                        if let Some(canon) = groups.canonical_of(&hit.id) {
+                            if canon != hit.id {
+                                continue;
+                            }
+                            if seen_canon.contains(&canon) {
+                                continue;
+                            }
+                            seen_canon.insert(canon);
+                        } else if groups.group_members(&hit.id).is_some()
+                            && groups.canonical_of(&hit.id).as_deref() == Some(hit.id.as_str())
+                        {
+                            if seen_canon.contains(&hit.id) {
+                                continue;
+                            }
+                            seen_canon.insert(hit.id.clone());
+                        }
+                    }
                     self.rows.push(Row::Item(index, 0));
                 }
             }
@@ -213,6 +236,24 @@ impl App {
                         let item = self.item(index);
                         if !self.visible(item) {
                             continue;
+                        }
+                        if !self.show_all_dupes {
+                            if let Some(canon) = groups.canonical_of(&item.id) {
+                                if canon != item.id {
+                                    continue;
+                                }
+                                if seen_canon.contains(&canon) {
+                                    continue;
+                                }
+                                seen_canon.insert(canon);
+                            } else if groups.group_members(&item.id).is_some()
+                                && groups.canonical_of(&item.id).as_deref() == Some(item.id.as_str())
+                            {
+                                if seen_canon.contains(&item.id) {
+                                    continue;
+                                }
+                                seen_canon.insert(item.id.clone());
+                            }
                         }
                         match item.id.split_once('@') {
                             None => self.rows.push(Row::Item(index, 0)),
@@ -512,6 +553,12 @@ impl App {
                 self.rebuild();
                 self.message = (if self.playable_only { "playable items only" } else { "all items" }).to_string();
             }
+            KeyCode::Char('D') => {
+                self.show_all_dupes = !self.show_all_dupes;
+                self.rebuild();
+                self.message =
+                    (if self.show_all_dupes { "show all duplicates" } else { "group duplicates" }).to_string();
+            }
             KeyCode::Char('/') => self.typing = true,
             KeyCode::Esc => {
                 if self.save.take().is_some() {
@@ -718,6 +765,7 @@ fn draw(frame: &mut Frame<'_>, app: &mut App) {
     let details = match app.selected_row() {
         Some(Row::Item(index, _)) => {
             let item = app.item(*index);
+            let catalog = app.library.catalog();
             let mut lines = vec![
                 Line::styled(item.id.clone(), Style::new().fg(ACCENT).add_modifier(Modifier::BOLD)),
                 Line::raw(item.name.clone()),
@@ -725,8 +773,18 @@ fn draw(frame: &mut Frame<'_>, app: &mut App) {
             if !item.title.is_empty() {
                 lines.push(Line::raw(item.title.clone()));
             }
-            if let Some(same) = app.library.catalog().same_as_text(item) {
+            if let Some(same) = catalog.same_as_text(item) {
                 lines.push(Line::raw(format!("Same as   {same}")));
+            }
+            if let Some(members) = catalog.groups().group_members(&item.id) {
+                lines.push(Line::raw(format!("Duplicates: {}", members.len())));
+                for m in &members {
+                    if let Some(it) = catalog.find(m) {
+                        lines.push(Line::styled(format!("  {} {}", it.id, it.name), Style::new().fg(Color::Gray)));
+                    } else {
+                        lines.push(Line::styled(format!("  {}", m), Style::new().fg(Color::Gray)));
+                    }
+                }
             }
             lines.push(Line::raw(""));
             lines.push(heading("Properties"));
@@ -802,6 +860,7 @@ fn help_line(width: usize) -> Line<'static> {
             ("/", "search"),
             ("a", "all items"),
             ("+-", "vol"),
+            ("D", "dupes"),
             ("?", "help"),
             ("q", "quit"),
         ],
@@ -1167,7 +1226,7 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, export_dir: &std::path::Path) {
         Line::raw("         sample: WAV FLAC Ogg VAG   bank: VAB"),
         Line::raw("         XA and CD: WAV FLAC Ogg"),
         Line::raw(format!("Folder   {folder}")),
-        Line::raw("Find     / search (Esc clears)   a all items"),
+        Line::raw("Find     / search (Esc clears)   a all items   D toggle dupes"),
         Line::raw("Other    ? this help   Esc clear or stop   q quit"),
     ];
     let rect = popup_for(area, &lines);

@@ -286,12 +286,28 @@ impl Gui {
         let mark = window
             .filter(|_| duration > 0.0 && self.looping)
             .map(|(a, b)| ((a / duration) as f32, (b / duration) as f32));
+        let dup_info = match (&self.state, shown) {
+            (State::Ready(browser), Some(item)) => browser
+                .loaded
+                .library
+                .catalog()
+                .groups()
+                .group_members(&item.id)
+                .map(|m| format!("{} duplicates", m.len())),
+            _ => None,
+        };
         let mut details = shown.map(|item| format!("{}  ·  {}", describe(item), item.id)).unwrap_or_default();
         if let Some((a, b)) = window {
             details.push_str(&format!("  ·  loop {} - {}", clock(a), clock(b)));
         }
+        if let Some(d) = &dup_info {
+            details.push_str(&format!("  ·  {d}"));
+        }
         let same_as = match (&self.state, shown) {
-            (State::Ready(browser), Some(item)) => browser.loaded.library.catalog().same_as_text(item),
+            (State::Ready(browser), Some(item)) => {
+                let cat = browser.loaded.library.catalog();
+                cat.same_as_text(item)
+            }
             _ => None,
         }
         .map(|text| format!("Same as {text}"));

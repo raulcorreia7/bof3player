@@ -53,6 +53,7 @@ pub mod cli;
 mod clock;
 #[cfg(feature = "audio")]
 pub mod deck;
+pub mod dedup;
 #[cfg(feature = "std")]
 pub mod discover;
 pub mod format;

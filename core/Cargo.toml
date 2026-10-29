@@ -53,6 +53,7 @@ required-features = ["gui"]
 psx-audio = { workspace = true, default-features = false }
 emi.workspace = true
 psx-formats.workspace = true
+sha2 = "0.11.1"
 clap = { workspace = true, optional = true }
 cpal = { workspace = true, optional = true }
 gpui = { workspace = true, optional = true }

@@ -343,7 +343,9 @@ impl Gui {
                             .child(level("L", left))
                             .child(level("R", right)),
                     )
-                    .child(spectrum(self.spectrum.levels.clone(), self.spectrum.caps.clone()).flex_1()),
+                    .child(
+                        spectrum(self.spectrum.levels.clone(), self.spectrum.caps.clone(), self.spectrum.tint).flex_1(),
+                    ),
             )
             .child(
                 div()

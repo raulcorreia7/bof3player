@@ -6,6 +6,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use crate::Library;
@@ -14,7 +15,7 @@ use crate::player::Loop;
 use crate::theme;
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, Gauge, List, ListItem, ListState, Padding, Paragraph, Wrap};
@@ -44,8 +45,6 @@ const MAX_HITS: usize = 5000;
 pub const METER_FALL: f32 = 0.06;
 /// Levels fall this much per second, the rate `METER_FALL` gives at `TICK`.
 const METER_FALL_PER_SECOND: f32 = METER_FALL / TICK.as_secs_f32();
-/// Bands of the spectrum analyzer.
-pub const SPECTRUM_BANDS: usize = 48;
 
 /// The open export menu: the item, its supported formats, their target files
 /// and how many times a looping track plays.
@@ -158,7 +157,7 @@ impl App {
             export: None,
             save: None,
             meters: (0.0, 0.0),
-            spectrum: Spectrum::new(SPECTRUM_BANDS),
+            spectrum: Spectrum::new(0),
             last_tick: Instant::now(),
             quit: false,
         };
@@ -762,7 +761,7 @@ fn draw(frame: &mut Frame<'_>, app: &mut App) {
             text,
         );
         if levels.height > 0 {
-            draw_levels(frame, app.meters, &app.spectrum, levels);
+            draw_levels(frame, app.meters, &mut app.spectrum, levels);
         }
     }
 
@@ -852,26 +851,51 @@ pub fn padding(area: Rect) -> Padding {
     if roomy(area) { Padding::new(2, 2, 1, 1) } else { Padding::horizontal(1) }
 }
 
-/// The browser's vertical split, top to bottom: the header (3 rows with a border, 1 when compact),
-/// the list and details taking the remaining height, the now-playing bar (about 30% of the height
-/// when roomy, 5 rows when compact), a row for messages and a row for the key help. Each has its
-/// own row, so none hides another. Shared by the library browser and the extract browser.
-pub fn screen_rows(area: Rect) -> [Rect; 5] {
-    let (header, playbar) = if roomy(area) { (3, (area.height * 3 / 10).clamp(10, 16)) } else { (1, 5) };
-    Layout::vertical([
-        Constraint::Length(header),
-        Constraint::Min(5),
-        Constraint::Length(playbar),
-        Constraint::Length(1),
-        Constraint::Length(1),
-    ])
-    .areas(area)
+/// Terminals shorter than this drop the header, keeping the rows for the list and the playbar.
+const HEADER_MIN_HEIGHT: u16 = 16;
+/// Terminals shorter than this drop the message and key help rows, keeping the now-playing bar.
+const FOOTER_MIN_HEIGHT: u16 = 8;
+/// A list shorter than this (its border and one row) is left out.
+const LIST_MIN_HEIGHT: u16 = 3;
+
+/// Whether the compact layout shows the levels and spectrum under the details: the details
+/// column is shown and tall enough. Otherwise the now-playing bar grows to hold them.
+fn levels_beside(area: Rect) -> bool {
+    !roomy(area) && area.width >= DETAILS_MIN_WIDTH && area.height >= 24
 }
 
-/// Split the details column: the text above and, in the compact layout when it is tall enough, the
-/// levels and spectrum below. The roomy layout shows them in the now-playing bar instead.
+/// The browser's vertical split, top to bottom: the header (3 rows with a border, 1 when compact,
+/// none when short), the list and details taking the remaining height (none when too short), the
+/// now-playing bar, a row for messages and a row for the key help (none when very short). The
+/// now-playing bar takes about 30% of the height when roomy; when compact it has 5 rows, plus a
+/// few spectrum rows when the details column does not show the levels and the terminal has the
+/// height. Each part has its own rows, so none hides another.
+pub fn screen_rows(area: Rect) -> [Rect; 5] {
+    let height = area.height;
+    let header = if roomy(area) {
+        3
+    } else if height >= HEADER_MIN_HEIGHT {
+        1
+    } else {
+        0
+    };
+    let footer = u16::from(height >= FOOTER_MIN_HEIGHT);
+    let playbar = if roomy(area) {
+        (height * 3 / 10).max(10)
+    } else if !levels_beside(area) && height >= 18 {
+        5 + (height / 5).clamp(2, 6)
+    } else {
+        5
+    };
+    let list = height.saturating_sub(header + playbar + 2 * footer);
+    let list = if list >= LIST_MIN_HEIGHT { list } else { 0 };
+    Layout::vertical([header, list, playbar, footer, footer].map(Constraint::Length)).flex(Flex::Start).areas(area)
+}
+
+/// Split the details column: the text above and, when [`levels_beside`] holds, the levels and
+/// spectrum below. Otherwise the now-playing bar shows them.
 pub fn split_details(area: Rect, full: Rect) -> [Rect; 2] {
-    let levels = if !roomy(full) && area.height >= 16 { (area.height / 3).clamp(7, 16) } else { 0 };
+    let levels = if levels_beside(full) { (area.height / 3).clamp(7, 16) } else { 0 };
     Layout::vertical([Constraint::Min(5), Constraint::Length(levels)]).areas(area)
 }
 
@@ -887,7 +911,7 @@ pub fn key(text: &str) -> Span<'static> {
     Span::styled(text.to_string(), Style::new().fg(Color::Black).bg(ACCENT))
 }
 
-fn draw_now_playing(frame: &mut Frame<'_>, app: &App, area: Rect) {
+fn draw_now_playing(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     let now = app.current.filter(|_| app.deck.is_loaded()).map(|index| {
         let item = app.item(index);
         let label = match item.title.as_str() {
@@ -896,20 +920,20 @@ fn draw_now_playing(frame: &mut Frame<'_>, app: &App, area: Rect) {
         };
         (item.id.clone(), label)
     });
-    draw_playbar(frame, &app.deck, now, app.looping, app.meters, &app.spectrum, area);
+    draw_playbar(frame, &app.deck, now, app.looping, app.meters, &mut app.spectrum, area);
 }
 
 /// The now-playing bar shared by the library browser and the extract browser: the title (bold)
-/// with the time at the right, a progress gauge, the loop and volume state, and, when roomy, the
-/// level meters and the spectrum across the full width. `now` is the id and label of what plays
-/// (None: nothing). It always has the same rows, so the layout does not jump.
+/// with the time at the right, a progress gauge, the loop and volume state, and, when it has the
+/// rows, the level meters and the spectrum across the full width. `now` is the id and label of
+/// what plays (None: nothing). It always has the same rows, so the layout does not jump.
 pub fn draw_playbar(
     frame: &mut Frame<'_>,
     deck: &Deck,
     now: Option<(String, String)>,
     looping: bool,
     meters: (f32, f32),
-    spectrum: &Spectrum,
+    spectrum: &mut Spectrum,
     area: Rect,
 ) {
     let full = frame.area();
@@ -935,8 +959,9 @@ pub fn draw_playbar(
         None => Line::styled("Nothing playing", Style::new().fg(DIM)),
     };
     let time = format!("{} / {}", clock(pos), clock(dur));
-    let [left, right] =
-        Layout::horizontal([Constraint::Fill(1), Constraint::Length(time.chars().count() as u16)]).areas(rows[0]);
+    let [left, right] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(time.chars().count() as u16)])
+        .spacing(1)
+        .areas(rows[0]);
     frame.render_widget(Paragraph::new(title), left);
     frame.render_widget(Paragraph::new(Line::styled(time, Style::new().add_modifier(Modifier::BOLD))), right);
 
@@ -974,14 +999,23 @@ pub fn draw_playbar(
         let [meter_area, bars] =
             Layout::horizontal([Constraint::Length(16), Constraint::Fill(1)]).spacing(2).areas(rows[3]);
         draw_meters(frame, meters, meter_area);
-        let lines = spectrum_lines(spectrum, bars.width as usize, bars.height as usize);
-        frame.render_widget(Paragraph::new(lines).style(Style::new().fg(ACCENT)), bars);
+        draw_spectrum(frame, spectrum, bars);
     }
 }
 
-/// A theme color as a terminal color.
+/// A theme color as a terminal color: the exact color where the terminal shows 24-bit color
+/// (`COLORTERM` is `truecolor` or `24bit`), else the nearest of the 256-color cube.
 fn themed(rgb: u32) -> Color {
-    Color::Rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
+    static TRUECOLOR: OnceLock<bool> = OnceLock::new();
+    let truecolor = *TRUECOLOR
+        .get_or_init(|| std::env::var("COLORTERM").is_ok_and(|value| matches!(value.as_str(), "truecolor" | "24bit")));
+    let [_, r, g, b] = rgb.to_be_bytes();
+    if truecolor {
+        Color::Rgb(r, g, b)
+    } else {
+        let level = |channel: u8| (u16::from(channel) * 5 + 127) / 255;
+        Color::Indexed((16 + 36 * level(r) + 6 * level(g) + level(b)) as u8)
+    }
 }
 
 /// One row of the progress bar, `width` cells wide: the played part in the accent with a
@@ -1047,43 +1081,39 @@ fn draw_meters(frame: &mut Frame<'_>, meters: (f32, f32), area: Rect) {
 }
 
 /// The level meters and the spectrum in a bordered block: the compact layout's visualizer.
-pub fn draw_levels(frame: &mut Frame<'_>, meters: (f32, f32), spectrum: &Spectrum, area: Rect) {
+pub fn draw_levels(frame: &mut Frame<'_>, meters: (f32, f32), spectrum: &mut Spectrum, area: Rect) {
     let block = Block::default().borders(Borders::ALL).padding(Padding::horizontal(1)).title(" Levels ");
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let rows = Layout::vertical([Constraint::Length(2), Constraint::Min(1)]).split(inner);
     draw_meters(frame, meters, rows[0]);
-    let bars = spectrum_lines(spectrum, rows[1].width as usize, rows[1].height as usize);
-    frame.render_widget(Paragraph::new(bars).style(Style::new().fg(ACCENT)), rows[1]);
+    draw_spectrum(frame, spectrum, rows[1]);
 }
 
-/// The spectrum as rows of block characters, loudest bands tallest, with a cap above each bar.
-fn spectrum_lines(spectrum: &Spectrum, width: usize, height: usize) -> Vec<Line<'static>> {
+/// The spectrum, one band per column: bars of eighth blocks colored by height and tinted by the
+/// music, with a cap above each bar.
+fn draw_spectrum(frame: &mut Frame<'_>, spectrum: &mut Spectrum, area: Rect) {
     const BLOCKS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-    let bands = spectrum.levels.len();
-    if width == 0 || height == 0 || bands == 0 {
-        return Vec::new();
+    /// Caps below this level are not drawn, so silence shows no stray marks.
+    const CAP_MIN: f32 = 0.02;
+    let tint = spectrum.tint;
+    let rows = usize::from(area.height);
+    let eighths = |level: f32| (level * (rows * 8) as f32).round() as usize;
+    spectrum.resize(usize::from(area.width));
+    let buffer = frame.buffer_mut();
+    for (x, (&level, &cap)) in (area.left()..).zip(spectrum.levels.iter().zip(&spectrum.caps)) {
+        let (fill, cap_row) = (eighths(level), eighths(cap).saturating_sub(1) / 8);
+        for (row, y) in (area.top()..area.bottom()).rev().enumerate() {
+            let fill = fill.saturating_sub(row * 8).min(8);
+            let cell = &mut buffer[(x, y)];
+            if fill == 0 && row == cap_row && cap > CAP_MIN {
+                cell.set_char('▔').set_fg(themed(theme::SPECTRUM_PEAK));
+            } else {
+                cell.set_char(BLOCKS[fill])
+                    .set_fg(themed(tint.apply(theme::spectrum_at((row as f32 + 0.5) / rows as f32))));
+            }
+        }
     }
-    let band_of = |column: usize| (column * bands / width).min(bands - 1);
-    (0..height)
-        .rev()
-        .map(|row| {
-            let spans: Vec<Span<'static>> = (0..width)
-                .map(|column| {
-                    let band = band_of(column);
-                    let eighths = (spectrum.levels[band] * (height * 8) as f32).round() as usize;
-                    let cap = ((spectrum.caps[band] * (height * 8) as f32).round() as usize).saturating_sub(1) / 8;
-                    let fill = eighths.saturating_sub(row * 8).min(8);
-                    if fill == 0 && cap == row && spectrum.caps[band] > 0.02 {
-                        Span::styled("▔", Style::new().fg(Color::Yellow))
-                    } else {
-                        Span::raw(BLOCKS[fill].to_string())
-                    }
-                })
-                .collect();
-            Line::from(spans)
-        })
-        .collect()
 }
 
 /// The longest `text` that fits `width` columns: a long path keeps its end.
@@ -1194,10 +1224,15 @@ pub fn run(global: &Global, naming: &dyn Naming) -> Result<ExitCode, String> {
             let frame = if app.animating() { FRAME } else { IDLE_FRAME };
             let mut wait = frame.saturating_sub(drawn.elapsed());
             while event::poll(wait)? {
-                if let Event::Key(key) = event::read()? {
-                    app.message.clear();
-                    app.on_key(key);
-                    break;
+                match event::read()? {
+                    Event::Key(key) => {
+                        app.message.clear();
+                        app.on_key(key);
+                        break;
+                    }
+                    // Redraw at once for the new size.
+                    Event::Resize(..) => break,
+                    _ => {}
                 }
                 wait = frame.saturating_sub(drawn.elapsed());
             }

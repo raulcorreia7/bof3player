@@ -2,7 +2,7 @@
 # PlayStation crates it reads through. The workspace builds on its own.
 [workspace]
 resolver = "3"
-members = ["core", "emi", "psx-audio", "psx-cd", "psx-formats"]
+members = ["bof3-names", "core", "emi", "psx-audio", "psx-cd", "psx-formats"]
 exclude = ["vendor/stacksafe-macro"]
 
 [patch.crates-io]

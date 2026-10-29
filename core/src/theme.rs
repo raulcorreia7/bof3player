@@ -52,6 +52,10 @@ pub const SPECTRUM_HIGH: u32 = 0x3dc3e6;
 pub const LOOP_BAND: u32 = 0x184051;
 /// The thin markers at the start and end of the loop window.
 pub const LOOP_MARK: u32 = 0x3dc3e6;
+/// The loop span over the played part of the bar: a dark teal, so the fill stays readable under it.
+pub const LOOP_BAND_PLAYED: u32 = 0x0a6178;
+/// The loop markers over the played part of the bar: light, against the fill and the band.
+pub const LOOP_MARK_PLAYED: u32 = 0xe5e5e5;
 /// The overlay behind dialogs: black, drawn translucent.
 pub const SCRIM: u32 = 0x000000;
 
@@ -117,6 +121,10 @@ mod tests {
         // The markers show on the band and on the bar's empty track.
         assert_contrast(LOOP_MARK, LOOP_BAND, 3.0);
         assert_contrast(LOOP_MARK, SURFACE_RAISED, 3.0);
+        // Over the played fill, the band and the markers still stand out.
+        assert_contrast(LOOP_MARK_PLAYED, ACCENT, 2.0);
+        assert_contrast(LOOP_MARK_PLAYED, LOOP_BAND_PLAYED, 3.0);
+        assert_contrast(LOOP_BAND_PLAYED, ACCENT, 1.5);
         assert_contrast(ACCENT, LOOP_BAND, 1.5);
         assert_contrast(ACCENT, SURFACE_RAISED, 3.0);
     }

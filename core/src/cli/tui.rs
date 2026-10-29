@@ -986,11 +986,11 @@ fn themed(rgb: u32) -> Color {
 
 /// One row of the progress bar, `width` cells wide: the played part in the accent with a
 /// sub-cell edge, and, for a loop `window` (fractions of the track), a shaded span with thin
-/// markers at its start and end.
+/// markers at its start and end. The markers and the span show over the played part.
 fn progress_line(width: usize, ratio: f64, window: Option<(f64, f64)>) -> Line<'static> {
     const EIGHTHS: [char; 7] = ['▏', '▎', '▍', '▌', '▋', '▊', '▉'];
     let band = themed(theme::LOOP_BAND);
-    let mark = themed(theme::LOOP_MARK);
+    let band_played = themed(theme::LOOP_BAND_PLAYED);
     let cells = width as f64;
     let filled = ratio.clamp(0.0, 1.0) * cells;
     let edges = window.map(|(a, b)| {
@@ -1001,14 +1001,20 @@ fn progress_line(width: usize, ratio: f64, window: Option<(f64, f64)>) -> Line<'
     let spans: Vec<Span<'static>> = (0..width)
         .map(|cell| {
             let inside = edges.is_some_and(|(start, end)| (start..=end).contains(&cell));
-            let ground = if inside { band } else { Color::Black };
             let covered = (filled - cell as f64).clamp(0.0, 1.0);
+            let played = covered >= 1.0;
+            let ground = match (inside, played) {
+                (true, true) => band_played,
+                (true, false) => band,
+                (false, _) => Color::Black,
+            };
             let is_edge = edges.is_some_and(|(start, end)| cell == start || cell == end);
-            if is_edge && covered < 1.0 {
+            if is_edge {
                 let glyph = if edges.is_some_and(|(start, _)| cell == start) { "▏" } else { "▕" };
-                Span::styled(glyph, Style::new().fg(mark).bg(ground))
-            } else if covered >= 1.0 {
-                Span::styled("█", Style::new().fg(ACCENT).bg(ground))
+                let mark = themed(if covered > 0.0 { theme::LOOP_MARK_PLAYED } else { theme::LOOP_MARK });
+                Span::styled(glyph, Style::new().fg(mark).bg(ground).add_modifier(Modifier::BOLD))
+            } else if played {
+                Span::styled("█", Style::new().fg(if inside { band_played } else { ACCENT }).bg(ground))
             } else if covered > 0.0 {
                 let step = ((covered * 8.0) as usize).clamp(1, 7) - 1;
                 Span::styled(EIGHTHS[step].to_string(), Style::new().fg(ACCENT).bg(ground))

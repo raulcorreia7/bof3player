@@ -36,6 +36,8 @@ pub struct Palette {
     pub selection: Hsla,
     pub loop_band: Hsla,
     pub loop_mark: Hsla,
+    pub loop_band_played: Hsla,
+    pub loop_mark_played: Hsla,
     pub on_accent: Hsla,
     pub focus_ring: Hsla,
     pub success: Hsla,
@@ -66,6 +68,8 @@ impl Palette {
             selection: color(theme::SELECTION),
             loop_band: color(theme::LOOP_BAND),
             loop_mark: color(theme::LOOP_MARK),
+            loop_band_played: color(theme::LOOP_BAND_PLAYED),
+            loop_mark_played: color(theme::LOOP_MARK_PLAYED),
             on_accent: color(theme::ON_ACCENT),
             focus_ring: color(theme::FOCUS_RING),
             success: color(theme::SUCCESS),
@@ -211,7 +215,8 @@ pub fn field(id: &'static str, text: &str, hint: &'static str, active: bool) -> 
 
 /// A horizontal bar that sets a value from `0.0` to `1.0` on click and drag. `bounds` receives the
 /// bar's last painted area, which maps the pointer to the value. `marks` are `(start, end)`
-/// fractions drawn as a band, for the loop window.
+/// fractions for the loop window: a band under the fill, a tint over the played part of it, and
+/// markers above everything.
 pub fn slider<T: 'static>(
     id: &'static str,
     fraction: f32,
@@ -231,6 +236,9 @@ pub fn slider<T: 'static>(
     let pressed = fraction_at.clone();
     let dragged = fraction_at;
     let measure = Rc::clone(bounds);
+    let fraction = fraction.clamp(0.0, 1.0);
+    let window =
+        mark.filter(|(start, end)| end > start).map(|(start, end)| (start.clamp(0.0, 1.0), end.clamp(0.0, 1.0)));
     let mut bar = div()
         .id(id)
         .relative()
@@ -239,50 +247,61 @@ pub fn slider<T: 'static>(
         .bg(palette.raised)
         .cursor_pointer()
         .child(canvas(move |area, _, _| measure.set(area), |_, (), _, _| {}).absolute().size_full());
-    if let Some((start, end)) = mark.filter(|(start, end)| end > start) {
+    if let Some((start, end)) = window {
         bar = bar.child(
             div()
                 .absolute()
                 .top_0()
                 .h_full()
-                .left(relative(start.clamp(0.0, 1.0)))
-                .w(relative((end - start).clamp(0.0, 1.0)))
+                .left(relative(start))
+                .w(relative(end - start))
                 .rounded_full()
                 .bg(palette.loop_band),
         );
-        for edge in [start, end] {
-            bar = bar.child(
-                div().absolute().top_0().h_full().left(relative(edge.clamp(0.0, 1.0))).w(px(2.0)).bg(palette.loop_mark),
-            );
-        }
     }
-    let fraction = fraction.clamp(0.0, 1.0);
-    bar.child(div().absolute().top_0().left_0().h_full().w(relative(fraction)).rounded_full().bg(palette.accent))
-        .child(
+    bar = bar.child(div().absolute().top_0().left_0().h_full().w(relative(fraction)).rounded_full().bg(palette.accent));
+    if let Some((start, end)) = window.filter(|(start, _)| *start < fraction) {
+        bar = bar.child(
             div()
                 .absolute()
-                .top(px(-2.0))
-                .left(relative(fraction))
-                .ml(px(-7.0))
-                .size(px(14.0))
-                .rounded_full()
-                .border_1()
-                .border_color(palette.border_strong)
-                .bg(palette.text),
-        )
-        .on_mouse_down(
-            MouseButton::Left,
-            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                set(this, pressed(event.position.x));
-                cx.notify();
-            }),
-        )
-        .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
-            if event.dragging() {
-                set(this, dragged(event.position.x));
-                cx.notify();
-            }
-        }))
+                .top_0()
+                .h_full()
+                .left(relative(start))
+                .w(relative(end.min(fraction) - start))
+                .bg(palette.loop_band_played),
+        );
+    }
+    bar = bar.child(
+        div()
+            .absolute()
+            .top(px(-2.0))
+            .left(relative(fraction))
+            .ml(px(-7.0))
+            .size(px(14.0))
+            .rounded_full()
+            .border_1()
+            .border_color(palette.border_strong)
+            .bg(palette.text),
+    );
+    if let Some((start, end)) = window {
+        for edge in [start, end] {
+            let color = if edge <= fraction { palette.loop_mark_played } else { palette.loop_mark };
+            bar = bar.child(div().absolute().top_0().h_full().left(relative(edge)).w(px(2.0)).bg(color));
+        }
+    }
+    bar.on_mouse_down(
+        MouseButton::Left,
+        cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+            set(this, pressed(event.position.x));
+            cx.notify();
+        }),
+    )
+    .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
+        if event.dragging() {
+            set(this, dragged(event.position.x));
+            cx.notify();
+        }
+    }))
 }
 
 /// A level meter for a peak of `0.0` to `1.0` and beyond.

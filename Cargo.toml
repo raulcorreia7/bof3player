@@ -8,6 +8,8 @@ exclude = ["vendor/stacksafe-macro"]
 [patch.crates-io]
 # gpui requires stacksafe 0.1; its macro uses an unmaintained dependency.
 stacksafe-macro = { path = "vendor/stacksafe-macro" }
+# gpui 0.2.2 pins taffy 0.9.0, which uses vulnerable grid 0.18.
+taffy = { path = "vendor/taffy" }
 
 [workspace.package]
 edition = "2024"

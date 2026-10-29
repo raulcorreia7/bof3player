@@ -4,6 +4,17 @@ All notable changes to `bof3player` are recorded here. The project follows
 [Semantic Versioning](https://semver.org/) and is distributed as a repository,
 not through a package registry.
 
+## 0.1.2
+
+- Added content-based deduplication for library items.
+- Removed the C API.
+- Improved spectrum bands, colours and TUI responsiveness.
+- Added grouping of same-content items with `--all`.
+- Added `bof3-names` crate for bundled catalog names.
+- Patched `taffy`/grid for a security update.
+- Meter the signal before volume and mute.
+- Report a missing GPU context instead of panicking.
+
 ## Unreleased
 
 - Removed the C API.

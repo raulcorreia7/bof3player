@@ -774,14 +774,14 @@ dependencies = [
 
 [[package]]
 name = "bof3-names"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bof3player",
 ]
 
 [[package]]
 name = "bof3player"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "clap",
  "claxon",
@@ -1891,7 +1891,7 @@ dependencies = [
 
 [[package]]
 name = "emi"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "psx-formats",
  "serde",
@@ -4911,7 +4911,7 @@ dependencies = [
 
 [[package]]
 name = "psx-audio"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "flacenc",
  "psx-cd",
@@ -4922,7 +4922,7 @@ dependencies = [
 
 [[package]]
 name = "psx-cd"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "md-5 0.11.0",
  "psx-formats",
@@ -4935,7 +4935,7 @@ dependencies = [
 
 [[package]]
 name = "psx-formats"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "png 0.18.1",
  "serde",

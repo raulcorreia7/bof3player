@@ -3,6 +3,11 @@
 All notable changes to `psx-audio` are recorded here. The crate follows
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.2
+
+- Meter the signal before volume and mute.
+- Improved spectrum bands and smoother rendering.
+
 ## 0.1.0
 
 First release, as its own crate.

@@ -1,6 +1,6 @@
 [package]
 name = "psx-cd"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.88"
 description = "PlayStation disc images: ISO9660, CD-XA and Mode 2 sectors, CUE sheets, extraction and patching"
@@ -13,7 +13,7 @@ publish = false
 
 [dependencies]
 md-5 = "0.11.0"
-psx-formats = { version = "0.1.1", path = "../psx-formats", default-features = false }
+psx-formats = { version = "0.1.2", path = "../psx-formats", default-features = false }
 quick-xml = "0.42.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

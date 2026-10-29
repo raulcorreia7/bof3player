@@ -134,6 +134,7 @@ struct Gui {
     looping: bool,
     continuous: bool,
     playable_only: bool,
+    show_all_dupes: bool,
     message: String,
     help: bool,
     chooser: Option<Chooser>,
@@ -171,6 +172,7 @@ impl Gui {
             looping: true,
             continuous: true,
             playable_only: true,
+            show_all_dupes: false,
             message: String::new(),
             help: false,
             chooser: None,
@@ -258,7 +260,37 @@ impl Gui {
     fn rebuild(&mut self) {
         let State::Ready(browser) = &mut self.state else { return };
         let keep = browser.rows.get(browser.selected).map(Row::key);
-        browser.rows = browser.tree.rows(&self.filter, self.playable_only);
+        let mut rows = browser.tree.rows(&self.filter, self.playable_only);
+        if !self.show_all_dupes {
+            let catalog = browser.loaded.library.catalog();
+            let groups = catalog.groups();
+            use std::collections::HashSet;
+            let mut seen: HashSet<String> = HashSet::new();
+            rows.retain(|row| {
+                if let Row::Item(item) = row {
+                    if let Some(canon) = groups.canonical_of(&item.id) {
+                        if canon != item.id {
+                            return false;
+                        }
+                        if seen.contains(&canon) {
+                            return false;
+                        }
+                        seen.insert(canon);
+                        return true;
+                    } else if groups.group_members(&item.id).is_some()
+                        && groups.canonical_of(&item.id).as_deref() == Some(item.id.as_str())
+                    {
+                        if seen.contains(&item.id) {
+                            return false;
+                        }
+                        seen.insert(item.id.clone());
+                        return true;
+                    }
+                }
+                true
+            });
+        }
+        browser.rows = rows;
         browser.selected = keep
             .and_then(|key| browser.rows.iter().position(|row| row.key() == key))
             .unwrap_or_else(|| browser.rows.iter().position(|row| matches!(row, Row::Item(_))).unwrap_or(0));
@@ -504,7 +536,7 @@ impl Gui {
             self.help = false;
         } else if self.export.is_some() {
             self.export_key(name);
-        } else if !self.browse_key(name, cx) {
+        } else if !self.browse_key_with_event(name, keystroke, cx) {
             return;
         }
         cx.stop_propagation();
@@ -553,8 +585,18 @@ impl Gui {
     }
 
     /// The browser's keys, as in the terminal browser. Returns whether the key was used.
-    fn browse_key(&mut self, name: &str, cx: &mut Context<Self>) -> bool {
+    fn browse_key_with_event(&mut self, name: &str, _keystroke: &Keystroke, cx: &mut Context<Self>) -> bool {
         match name {
+            "D" => {
+                self.show_all_dupes = !self.show_all_dupes;
+                self.rebuild();
+                self.message = if self.show_all_dupes {
+                    "Show all duplicates".to_string()
+                } else {
+                    "Group duplicates".to_string()
+                };
+                return true;
+            }
             "q" => cx.quit(),
             "j" | "down" => self.move_by(1),
             "k" | "up" => self.move_by(-1),

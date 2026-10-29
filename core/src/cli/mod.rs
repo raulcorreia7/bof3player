@@ -64,7 +64,7 @@ enum Command {
     /// List items
     #[command(
         alias = "ls",
-        after_help = "Examples:\n  bof3player list --kind music\n  bof3player list --kind xa --family BMAG_XA\n  bof3player list --limit 20"
+        after_help = "Examples:\n  bof3player list --kind music\n  bof3player list --kind xa --family BMAG_XA\n  bof3player list --limit 20\n  bof3player list --all"
     )]
     List {
         #[command(flatten)]
@@ -72,11 +72,14 @@ enum Command {
         /// Show at most this many rows (default: every row)
         #[arg(long)]
         limit: Option<usize>,
+        /// Show all duplicates (default: grouped/collapsed)
+        #[arg(long)]
+        all: bool,
     },
     /// Ranked search over ids, names, titles and families
     #[command(
         alias = "find",
-        after_help = "Examples:\n  bof3player search battle\n  bof3player search --kind sample drum\n  bof3player search --playable boss"
+        after_help = "Examples:\n  bof3player search battle\n  bof3player search --kind sample drum\n  bof3player search --playable boss\n  bof3player search --all battle"
     )]
     Search {
         query: String,
@@ -85,6 +88,9 @@ enum Command {
         /// Show at most this many rows
         #[arg(long, default_value_t = 30)]
         limit: usize,
+        /// Show all duplicates (default: grouped/collapsed)
+        #[arg(long)]
+        all: bool,
     },
     /// Details of one item
     #[command(
@@ -263,9 +269,9 @@ pub fn main(program: &str, args: Vec<OsString>, naming: &dyn Naming) -> ExitCode
             return ExitCode::from(2);
         }
         Some(Command::Doctor) => commands::doctor(&cli.global, naming),
-        Some(Command::List { filters, limit }) => commands::list(&cli.global, &filters, limit, naming),
-        Some(Command::Search { query, filters, limit }) => {
-            commands::search(&cli.global, &query, &filters, limit, naming)
+        Some(Command::List { filters, limit, all }) => commands::list_with(&cli.global, &filters, limit, naming, all),
+        Some(Command::Search { query, filters, limit, all }) => {
+            commands::search_with(&cli.global, &query, &filters, limit, naming, all)
         }
         Some(Command::Info { item }) => commands::info(&cli.global, &item, naming),
         Some(Command::Play { item, forever }) => commands::play(&cli.global, &item, cli.global.loops, forever, naming),

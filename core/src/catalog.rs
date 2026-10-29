@@ -22,6 +22,7 @@ use alloc::vec::Vec;
 use core::cmp::Ordering;
 
 use crate::clock;
+use crate::dedup::{self, Groups};
 use crate::error::{Error, Result};
 use crate::format::emi::{self as emi_format, Emi, EntryType};
 use crate::format::sep::{self, Package};
@@ -253,6 +254,7 @@ impl Naming for NoNaming {}
 pub struct Catalog {
     items: Vec<Item>,
     by_id: BTreeMap<String, usize>,
+    groups: Groups,
 }
 
 fn natural_compare(left: &str, right: &str) -> Ordering {
@@ -330,7 +332,13 @@ impl Catalog {
             }
         }
         let by_id = items.iter().enumerate().map(|(i, item)| (item.id.clone(), i)).collect();
-        Ok(Self { items, by_id })
+        let mut groups = Groups::new();
+        for item in &items {
+            if let Ok(Some(key)) = dedup::group_key(item, source) {
+                groups.add(key, item.id.clone());
+            }
+        }
+        Ok(Self { items, by_id, groups })
     }
 
     /// Number of items.
@@ -384,6 +392,18 @@ impl Catalog {
     #[must_use]
     pub fn index_of(&self, id: &str) -> Option<usize> {
         self.by_id.get(id).copied().or_else(|| self.items.iter().position(|i| i.id.eq_ignore_ascii_case(id)))
+    }
+
+    /// Content-based duplicate groups.
+    #[must_use]
+    pub fn groups(&self) -> &Groups {
+        &self.groups
+    }
+
+    /// All duplicate groups with count > 1.
+    #[must_use]
+    pub fn duplicate_groups(&self) -> Vec<crate::dedup::Group> {
+        self.groups.groups()
     }
 
     /// How well `item` matches `query`.
@@ -945,7 +965,7 @@ mod tests {
             a.kind.cmp(&b.kind).then_with(|| natural_compare(&a.id, &b.id)).then_with(|| a.id.cmp(&b.id))
         });
         let by_id = items.iter().enumerate().map(|(i, item)| (item.id.clone(), i)).collect();
-        Catalog { items, by_id }
+        Catalog { items, by_id, groups: Groups::default() }
     }
 
     #[test]

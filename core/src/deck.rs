@@ -7,7 +7,7 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use crate::Player;
@@ -187,15 +187,15 @@ impl Shared {
                 inner.frac += ratio;
                 [inner.prev[0] + (inner.cur[0] - inner.prev[0]) * t, inner.prev[1] + (inner.cur[1] - inner.prev[1]) * t]
             };
-            // The analyzer taps the signal before volume and mute, so it keeps moving when the
-            // output is quiet or off.
+            // The analyzer and the meters tap the signal before volume and mute, so they keep
+            // moving when the output is quiet or off.
             if inner.scope.len() >= SCOPE_SAMPLES {
                 inner.scope.pop_front();
             }
             inner.scope.push_back((l + r) * 0.5);
-            let (l, r) = (l * volume, r * volume);
             peak_l = peak_l.max(l.abs());
             peak_r = peak_r.max(r.abs());
+            let (l, r) = (l * volume, r * volume);
             if channels == 1 {
                 frame[0] = (l + r) * 0.5;
             } else {
@@ -226,6 +226,8 @@ pub struct Deck {
     _stream: Option<cpal::Stream>,
     /// Name of the output device, or `silent`.
     pub device: String,
+    /// The scope copy [`analyze`](Self::analyze) reuses, so it does not allocate per frame.
+    samples: Mutex<Vec<f32>>,
 }
 
 impl Deck {
@@ -281,7 +283,7 @@ impl Deck {
                 std::thread::sleep(pace);
             }
         });
-        Self { shared, _stream: None, device: "silent".into() }
+        Self { shared, _stream: None, device: "silent".into(), samples: Mutex::default() }
     }
 
     fn open_device() -> Result<Self, String> {
@@ -325,7 +327,7 @@ impl Deck {
         }
         .map_err(|e| e.to_string())?;
         stream.play().map_err(|e| e.to_string())?;
-        Ok(Self { shared, _stream: Some(stream), device: name })
+        Ok(Self { shared, _stream: Some(stream), device: name, samples: Mutex::default() })
     }
 
     /// Start playing `player` from its current position.
@@ -420,7 +422,7 @@ impl Deck {
         f32::from_bits(self.shared.volume.load(Ordering::Relaxed))
     }
 
-    /// Recent peak levels (left, right), `0.0..`.
+    /// Recent peak levels (left, right), `0.0..`, before volume and mute.
     pub fn peaks(&self) -> (f32, f32) {
         (
             f32::from_bits(self.shared.peak_left.load(Ordering::Relaxed)),
@@ -436,7 +438,10 @@ impl Deck {
     /// Update `spectrum` from the output, or let its bars fall while nothing plays.
     pub fn analyze(&self, spectrum: &mut crate::spectrum::Spectrum) {
         if self.is_loaded() && !self.paused() {
-            spectrum.update(&self.scope(), self.output_rate());
+            let mut samples = self.samples.lock().unwrap_or_else(PoisonError::into_inner);
+            samples.clear();
+            samples.extend(&self.shared.lock().scope);
+            spectrum.update(&samples, self.output_rate());
         } else {
             spectrum.fade();
         }
@@ -484,7 +489,7 @@ mod tests {
     }
 
     #[test]
-    fn the_spectrum_moves_while_muted() {
+    fn the_spectrum_and_meters_move_while_muted() {
         let shared = Deck::make_shared(44_100, 2);
         {
             let mut inner = shared.lock();
@@ -495,6 +500,7 @@ mod tests {
         let mut out = vec![0.0f32; 8192 * 2];
         shared.fill(&mut out);
         assert!(out.iter().all(|&sample| sample == 0.0), "the output is silent");
+        assert!(f32::from_bits(shared.peak_left.load(Ordering::Relaxed)) > 0.1, "the meters move");
         let scope: Vec<f32> = shared.lock().scope.iter().copied().collect();
         let mut spectrum = Spectrum::new(48);
         spectrum.update(&scope, 44_100);

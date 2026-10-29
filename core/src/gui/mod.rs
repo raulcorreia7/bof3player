@@ -65,7 +65,8 @@ pub fn main(args: Vec<OsString>) -> ExitCode {
     let global = cli.global;
     let failed = Rc::new(Cell::new(false));
     let opened = Rc::clone(&failed);
-    Application::new().with_assets(icons::Icons).run(move |cx: &mut App| {
+    let Some(application) = start() else { return ExitCode::FAILURE };
+    application.with_assets(icons::Icons).run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1000.0), px(720.0)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -87,6 +88,27 @@ pub fn main(args: Vec<OsString>) -> ExitCode {
         }
     });
     if failed.get() { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+}
+
+/// Start the toolkit, or explain why it cannot start. The toolkit panics when the system gives it
+/// no GPU context (it has no software renderer), so the panic is caught and reported as an error.
+fn start() -> Option<Application> {
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let started = std::panic::catch_unwind(Application::new);
+    std::panic::set_hook(hook);
+    started
+        .map_err(|panic| {
+            let reason = panic
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| panic.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown error");
+            eprintln!(
+                "bof3player-gui: cannot start the window: {reason}.\nCheck that a Vulkan graphics driver is installed and the display is reachable, or use bof3player-tui."
+            );
+        })
+        .ok()
 }
 
 /// What the window shows in place of the list.

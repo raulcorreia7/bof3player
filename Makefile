@@ -16,7 +16,7 @@ help:
 	@echo "  build    Release build of bof3player, bof3player-tui and bof3player-gui."
 	@echo "  test     cargo test --workspace --all-features --locked."
 	@echo "  format   cargo fmt; CHECK=1 only checks."
-	@echo "  lint     cargo clippy -D warnings, then cargo deny if installed."
+	@echo "  lint     cargo clippy -D warnings, then cargo deny."
 	@echo "  check    format, lint, test and no-default-features check."
 	@echo "  run-tui  Run the terminal browser; pass ARGS='...'."
 	@echo "  run-gui  Run the window; pass ARGS='...'."
@@ -40,8 +40,8 @@ format:
 
 lint:
 	cargo clippy --workspace --all-features --all-targets --locked -- -D warnings
-	@if command -v cargo-deny >/dev/null 2>&1; then cargo deny check; \
-	else echo "cargo-deny not installed: skipped"; fi
+	@command -v cargo-deny >/dev/null 2>&1 || { echo "cargo-deny missing: cargo install cargo-deny" >&2; exit 1; }
+	cargo deny check
 
 check:
 	$(MAKE) format CHECK=1

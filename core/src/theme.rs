@@ -44,10 +44,15 @@ pub const SUCCESS: u32 = 0x0dbc79;
 pub const WARNING: u32 = 0xe5e510;
 /// Errors and a clipping level: ANSI bright red, which reads on dark surfaces.
 pub const DANGER: u32 = 0xf14c4c;
-/// The quiet end of the spectrum.
-pub const SPECTRUM_LOW: u32 = 0x0e8dad;
-/// The loud end of the spectrum.
-pub const SPECTRUM_HIGH: u32 = 0x3dc3e6;
+/// The spectrum's gradient by height, foot to top: cool blue, violet, then a warm pink at full
+/// level. Every stop reads on the dark surfaces and on a light terminal.
+pub const SPECTRUM: [u32; 3] = [0x1e88e5, 0x8e5cf0, 0xf0507f];
+/// The peak caps above the spectrum's bars: a bright amber that stands apart from the gradient.
+pub const SPECTRUM_PEAK: u32 = 0xffa31a;
+/// The spectrum's tint while the music sits in the bass.
+pub const SPECTRUM_WARM: u32 = 0xff7a45;
+/// The spectrum's tint while the music sits in the treble.
+pub const SPECTRUM_COOL: u32 = 0x2fd5e8;
 /// The shaded span of a track's loop window on the progress bar: a dim tint of the accent.
 pub const LOOP_BAND: u32 = 0x184051;
 /// The thin markers at the start and end of the loop window.
@@ -58,6 +63,23 @@ pub const LOOP_BAND_PLAYED: u32 = 0x0a6178;
 pub const LOOP_MARK_PLAYED: u32 = 0xe5e5e5;
 /// The overlay behind dialogs: black, drawn translucent.
 pub const SCRIM: u32 = 0x000000;
+
+/// The spectrum's color at `height`, from `0.0` (the foot of a bar) to `1.0` (full level).
+#[must_use]
+pub fn spectrum_at(height: f32) -> u32 {
+    let at = height.clamp(0.0, 1.0) * (SPECTRUM.len() - 1) as f32;
+    let low = (at as usize).min(SPECTRUM.len() - 2);
+    mix(SPECTRUM[low], SPECTRUM[low + 1], at - low as f32)
+}
+
+/// The color `t` of the way from `a` to `b`, channel by channel.
+#[must_use]
+pub fn mix(a: u32, b: u32, t: f32) -> u32 {
+    [16, 8, 0].into_iter().fold(0, |out, shift| {
+        let (from, to) = (((a >> shift) & 0xff) as f32, ((b >> shift) & 0xff) as f32);
+        out | ((from + (to - from) * t).round() as u32) << shift
+    })
+}
 
 #[cfg(test)]
 mod tests {
@@ -113,7 +135,10 @@ mod tests {
     #[test]
     fn borders_icons_and_bars_are_visible() {
         for background in SURFACES {
-            for part in [BORDER_STRONG, FOCUS_RING, SPECTRUM_LOW, SPECTRUM_HIGH, SUCCESS] {
+            for part in [BORDER_STRONG, FOCUS_RING, SUCCESS, SPECTRUM_PEAK, SPECTRUM_WARM, SPECTRUM_COOL]
+                .into_iter()
+                .chain(SPECTRUM)
+            {
                 assert_contrast(part, background, 3.0);
             }
         }
@@ -127,6 +152,17 @@ mod tests {
         assert_contrast(LOOP_BAND_PLAYED, ACCENT, 1.5);
         assert_contrast(ACCENT, LOOP_BAND, 1.5);
         assert_contrast(ACCENT, SURFACE_RAISED, 3.0);
+    }
+
+    #[test]
+    fn the_spectrum_reads_on_a_light_terminal_and_blends_between_stops() {
+        for part in SPECTRUM {
+            assert_contrast(part, 0xffffff, 3.0);
+        }
+        assert_eq!(spectrum_at(0.0), SPECTRUM[0]);
+        assert_eq!(spectrum_at(0.5), SPECTRUM[1]);
+        assert_eq!(spectrum_at(1.0), SPECTRUM[2]);
+        assert_eq!(spectrum_at(0.25), mix(SPECTRUM[0], SPECTRUM[1], 0.5));
     }
 
     /// The tokens equal the ANSI colors the terminal player names, in the Dark+ terminal scheme.

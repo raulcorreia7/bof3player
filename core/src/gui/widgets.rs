@@ -6,12 +6,12 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    Background, Bounds, Context, Div, FontWeight, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels,
-    SharedString, Stateful, canvas, div, fill, linear_color_stop, linear_gradient, point, prelude::*, px, relative,
-    rgb, size,
+    Bounds, Context, Div, FontWeight, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, SharedString,
+    Stateful, canvas, div, fill, linear_color_stop, linear_gradient, point, prelude::*, px, relative, rgb, size,
 };
 
 use super::icons::icon;
+use crate::spectrum::Tint;
 use crate::theme;
 
 /// The corner radius of controls, rows and fields.
@@ -77,15 +77,6 @@ impl Palette {
             warning: color(theme::WARNING),
             scrim: Hsla { a: 0.6, ..color(theme::SCRIM) },
         }
-    }
-
-    /// The spectrum's gradient: the loud end at the top of a bar, the quiet end at the bottom.
-    pub fn spectrum(angle: f32) -> Background {
-        linear_gradient(
-            angle,
-            linear_color_stop(rgb(theme::SPECTRUM_HIGH), 0.0),
-            linear_color_stop(rgb(theme::SPECTRUM_LOW), 1.0),
-        )
     }
 }
 
@@ -319,10 +310,16 @@ pub fn meter(level: f32) -> Div {
         .child(div().h_full().w(relative(level.clamp(0.0, 1.0))).rounded_full().bg(color))
 }
 
-/// The spectrum: rounded bars in a subtle blue gradient with a thin cap on each peak.
-pub fn spectrum(levels: Vec<f32>, caps: Vec<f32>) -> Div {
+/// The spectrum: rounded bars colored by height from the theme's gradient and tinted by the
+/// music, with a thin cap on each peak.
+pub fn spectrum(levels: Vec<f32>, caps: Vec<f32>, tint: Tint) -> Div {
     let palette = Palette::get();
-    let cap_color = palette.muted;
+    let cap_color = color(theme::SPECTRUM_PEAK);
+    // The top of a bar takes the gradient's color at its level, the foot the color at zero.
+    let bar_fill = move |level: f32| {
+        let stop = |height: f32, at: f32| linear_color_stop(rgb(tint.apply(theme::spectrum_at(height))), at);
+        linear_gradient(0.0, stop(level, 0.0), stop(0.0, 1.0))
+    };
     div().h(px(112.0)).rounded(px(RADIUS)).bg(palette.bg).child(
         canvas(
             |area, _, _| area,
@@ -336,8 +333,7 @@ pub fn spectrum(levels: Vec<f32>, caps: Vec<f32>) -> Div {
                     let width = slot * 0.68;
                     if level >= 0.02 {
                         let height = (rise * level).max(px(3.0));
-                        let mut bar =
-                            fill(Bounds::new(point(x, base - height), size(width, height)), Palette::spectrum(0.0));
+                        let mut bar = fill(Bounds::new(point(x, base - height), size(width, height)), bar_fill(level));
                         bar.corner_radii = (width * 0.25).into();
                         window.paint_quad(bar);
                     }

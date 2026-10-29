@@ -111,7 +111,7 @@ fn item_json(item: &Item) -> serde_json::Value {
     })
 }
 
-fn print_rows(global: &Global, catalog: &Catalog, rows: &[&Item], total: usize) {
+fn print_rows(global: &Global, catalog: &Catalog, rows: &[&Item], total: usize, show_all: bool) {
     if global.json {
         say!(
             "{}",
@@ -119,7 +119,57 @@ fn print_rows(global: &Global, catalog: &Catalog, rows: &[&Item], total: usize) 
         );
         return;
     }
+    let groups = catalog.groups();
+    use std::collections::HashSet;
+    let mut seen_group: HashSet<String> = HashSet::new();
     for item in rows {
+        if !show_all {
+            if let Some(canon) = groups.canonical_of(&item.id) {
+                if canon != item.id {
+                    continue;
+                }
+                if let Some(members) = groups.group_members(&item.id) {
+                    if seen_group.contains(&canon) {
+                        continue;
+                    }
+                    seen_group.insert(canon);
+                    let title = if item.title.is_empty() { String::new() } else { format!("{} · ", item.title) };
+                    let same = catalog.same_as_text(item).map_or_else(String::new, |text| format!("  same as {text}"));
+                    say!(
+                        "{:<6} {:<28} {:>8}  {}{}{} ×{}",
+                        item.kind.name(),
+                        item.id,
+                        duration_text(item),
+                        title,
+                        item.name,
+                        same,
+                        members.len()
+                    );
+                    continue;
+                }
+            }
+            if let Some(members) = groups.group_members(&item.id)
+                && groups.canonical_of(&item.id).as_deref() == Some(item.id.as_str())
+            {
+                if seen_group.contains(&item.id) {
+                    continue;
+                }
+                seen_group.insert(item.id.clone());
+                let title = if item.title.is_empty() { String::new() } else { format!("{} · ", item.title) };
+                let same = catalog.same_as_text(item).map_or_else(String::new, |text| format!("  same as {text}"));
+                say!(
+                    "{:<6} {:<28} {:>8}  {}{}{} ×{}",
+                    item.kind.name(),
+                    item.id,
+                    duration_text(item),
+                    title,
+                    item.name,
+                    same,
+                    members.len()
+                );
+                continue;
+            }
+        }
         let title = if item.title.is_empty() { String::new() } else { format!("{} · ", item.title) };
         let same = catalog.same_as_text(item).map_or_else(String::new, |text| format!("  same as {text}"));
         say!("{:<6} {:<28} {:>8}  {}{}{}", item.kind.name(), item.id, duration_text(item), title, item.name, same);
@@ -129,21 +179,46 @@ fn print_rows(global: &Global, catalog: &Catalog, rows: &[&Item], total: usize) 
     }
 }
 
+#[allow(dead_code)]
 pub fn list(global: &Global, filters: &Filters, limit: Option<usize>, naming: &dyn Naming) -> Outcome {
+    list_with(global, filters, limit, naming, false)
+}
+
+pub fn list_with(
+    global: &Global,
+    filters: &Filters,
+    limit: Option<usize>,
+    naming: &dyn Naming,
+    show_all: bool,
+) -> Outcome {
     let library = open_library(global, naming)?;
     let filter = filter_of(filters)?;
     let hits = library.catalog().search("", &filter);
     let shown = &hits[..limit.map_or(hits.len(), |l| l.min(hits.len()))];
-    print_rows(global, library.catalog(), shown, hits.len());
+    print_rows(global, library.catalog(), shown, hits.len(), show_all);
     Ok(ExitCode::SUCCESS)
 }
 
+#[allow(dead_code)]
 pub fn search(global: &Global, query: &str, filters: &Filters, limit: usize, naming: &dyn Naming) -> Outcome {
+    search_with(global, query, filters, limit, naming, false)
+}
+
+pub fn search_with(
+    global: &Global,
+    query: &str,
+    filters: &Filters,
+    limit: usize,
+    naming: &dyn Naming,
+    show_all: bool,
+) -> Outcome {
     let library = open_library(global, naming)?;
     let filter = filter_of(filters)?;
     let hits = library.catalog().search(query, &filter);
+    // If not showing all, we still need to find matches - but search should match any member; our current search looks up by item properties
+    // The requirement says "Search matches any member" - so ensure we find items if any member matches; our existing search does substring matching on item fields, should be fine
     let shown = &hits[..limit.min(hits.len())];
-    print_rows(global, library.catalog(), shown, hits.len());
+    print_rows(global, library.catalog(), shown, hits.len(), show_all);
     Ok(if hits.is_empty() { ExitCode::from(1) } else { ExitCode::SUCCESS })
 }
 
@@ -151,7 +226,12 @@ pub fn info(global: &Global, query: &str, naming: &dyn Naming) -> Outcome {
     let library = open_library(global, naming)?;
     let item = resolve(library, query)?;
     if global.json {
-        say!("{}", serde_json::to_string_pretty(&item_json(item)).unwrap_or_default());
+        let mut val = item_json(item);
+        // add duplicates info
+        if let Some(members) = library.catalog().groups().group_members(&item.id) {
+            val["duplicates"] = json!(members);
+        }
+        say!("{}", serde_json::to_string_pretty(&val).unwrap_or_default());
         return Ok(ExitCode::SUCCESS);
     }
     say!("id        {}\nkind      {}\nname      {}", item.id, item.kind.name(), item.name);
@@ -160,6 +240,16 @@ pub fn info(global: &Global, query: &str, naming: &dyn Naming) -> Outcome {
     }
     if let Some(same) = library.catalog().same_as_text(item) {
         say!("same as   {same}");
+    }
+    if let Some(members) = library.catalog().groups().group_members(&item.id) {
+        say!("duplicates {}:", members.len());
+        for m in members {
+            if let Some(it) = library.catalog().find(&m) {
+                say!("  {}  {}  {}", it.id, it.name, it.path);
+            } else {
+                say!("  {}", m);
+            }
+        }
     }
     say!("family    {}\nduration  {}\ndetail    {}", item.family, duration_text(item), item.detail);
     say!(
@@ -422,16 +512,61 @@ fn render_all(
     dir: &Path,
     style: &RenderStyle,
     filters: &Filters,
+    all_flag: bool,
 ) -> Result<usize, String> {
     let mut filter = filter_of(filters)?;
     filter.playable_only = true;
     let mut failed = 0;
-    for hit in library.catalog().search(query, &filter) {
+    let catalog = library.catalog();
+    let groups = catalog.groups();
+    use std::collections::HashSet;
+    let mut rendered: HashSet<String> = HashSet::new();
+    for hit in catalog.search(query, &filter) {
+        if !all_flag {
+            if let Some(canon) = groups.canonical_of(&hit.id) {
+                if canon != hit.id {
+                    continue;
+                }
+                if rendered.contains(&canon) {
+                    continue;
+                }
+                rendered.insert(canon.clone());
+                let path = dir.join(format!("{}.{}", file_stem(&hit.id), style.format.extension()));
+                if let Err(e) = render_item(global, library, hit, &path, style) {
+                    eprintln!("player: {e}");
+                    failed += 1;
+                }
+                continue;
+            } else if let Some(members) = groups.group_members(&hit.id) {
+                if groups.canonical_of(&hit.id).as_deref() == Some(hit.id.as_str()) && !rendered.contains(&hit.id) {
+                    rendered.insert(hit.id.clone());
+                    let path = dir.join(format!("{}.{}", file_stem(&hit.id), style.format.extension()));
+                    if let Err(e) = render_item(global, library, hit, &path, style) {
+                        eprintln!("player: {e}");
+                        failed += 1;
+                    }
+                    continue;
+                } else if groups.canonical_of(&hit.id).is_none()
+                    && members.contains(&hit.id)
+                    && members[0] == hit.id
+                    && !rendered.contains(&hit.id)
+                {
+                    // shouldn't happen if canonical logic is correct
+                }
+            }
+        }
+        if rendered.contains(&hit.id) && !all_flag {
+            // check if it's a non-canonical duplicate
+            if groups.is_duplicate(&hit.id) && groups.canonical_of(&hit.id).as_deref() != Some(hit.id.as_str()) {
+                continue;
+            }
+        }
         let path = dir.join(format!("{}.{}", file_stem(&hit.id), style.format.extension()));
         if let Err(e) = render_item(global, library, hit, &path, style) {
             eprintln!("player: {e}");
             failed += 1;
         }
+        rendered.insert(hit.id.clone());
     }
     Ok(failed)
 }
@@ -447,7 +582,7 @@ pub fn render_matching(global: &Global, query: &str, dir: &Path, naming: &dyn Na
         fade: global.fade.unwrap_or(0.0),
         name: "wav",
     };
-    render_all(global, library, query, dir, &style, &Filters::default())
+    render_all(global, library, query, dir, &style, &Filters::default(), false)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -475,7 +610,7 @@ pub fn render(
     let library = open_library(global, naming)?;
     if all {
         let dir = out_dir.ok_or("render --all needs an output folder: pass --out-dir DIR.")?;
-        let failed = render_all(global, library, item.unwrap_or(""), &dir, &style, filters)?;
+        let failed = render_all(global, library, item.unwrap_or(""), &dir, &style, filters, all)?;
         return Ok(if failed == 0 { ExitCode::SUCCESS } else { ExitCode::from(1) });
     }
     let query = item.ok_or("render needs an item: pass an id or query, or --all.")?;

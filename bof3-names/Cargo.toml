@@ -1,0 +1,14 @@
+[package]
+name = "bof3-names"
+description = "Bundled Breath of Fire III catalog names"
+version = "0.1.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+bof3player = { workspace = true, features = ["names"] }
+
+[lints]
+workspace = true

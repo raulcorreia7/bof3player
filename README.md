@@ -78,6 +78,7 @@ directory or in `data/`. `--names FILE` or `$BOF3_NAMES` picks another file. See
 
 | Part                                 | What it is                                                                                           | Guide                                        |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| [bof3-names](bof3-names/README.md)   | Bundled game names for Rust library callers.                                                          | [Names file](data/README.md)                 |
 | [core](core/README.md)               | `bof3player`: catalog, playback and export in Rust, and the `bof3player` and `bof3player-tui` tools. | [docs/rust-api.md](docs/rust-api.md)         |
 | [psx-audio](psx-audio/README.md)     | SPU voices, XA and CD-DA playback, sources, WAV, FLAC and Ogg export.                                | [docs/crates.md](docs/crates.md#psx-audio)   |
 | [psx-formats](psx-formats/README.md) | VAB, SEP, ADPCM, sector, VRAM, CLUT and TIM formats.                                                 | [docs/crates.md](docs/crates.md#psx-formats) |

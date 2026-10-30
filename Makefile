@@ -6,14 +6,16 @@
 # Passed to `run-tui` and `run-gui`, e.g. make run-tui ARGS='-i "Breath of Fire III.cue"'.
 ARGS ?=
 
-.PHONY: help build test format lint check run-tui run-gui clean
+.PHONY: help build build-cli build-gui test format lint check run-tui run-gui clean
 
 help:
 	@echo "bof3player: the player, its library and the PlayStation crates (cargo)"
 	@echo ""
 	@echo "Targets:"
 	@echo "  help     List these targets (default)."
-	@echo "  build    Release build of bof3player, bof3player-tui and bof3player-gui."
+	@echo "  build    Release build of all player interfaces."
+	@echo "  build-cli Release build of bof3player and bof3player-tui."
+	@echo "  build-gui Release build of bof3player-gui."
 	@echo "  test     cargo test --workspace --all-features --locked."
 	@echo "  format   cargo fmt; CHECK=1 only checks."
 	@echo "  lint     cargo clippy -D warnings, then cargo deny."
@@ -27,8 +29,12 @@ help:
 	@echo "  cargo build --release --locked -p bof3player --features gui --bin bof3player-gui"
 	@echo "  cargo test --workspace --all-features --locked"
 
-build:
+build: build-cli build-gui
+
+build-cli:
 	cargo build --release --locked -p bof3player --features cli --bin bof3player --bin bof3player-tui
+
+build-gui:
 	cargo build --release --locked -p bof3player --features gui --bin bof3player-gui
 
 test:
